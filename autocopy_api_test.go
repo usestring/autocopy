@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -46,6 +47,52 @@ func TestClassifierErrorsReturnNoCopy(t *testing.T) {
 	failure := errors.New("classifier unavailable")
 	got, err := Extract(context.Background(), "Run `example command`.", classifierFunc(func(context.Context, Input) (map[string]float64, error) { return nil, failure }))
 	if got != nil || !errors.Is(err, failure) {
+		t.Fatalf("got=%q err=%v", got, err)
+	}
+}
+
+func TestSelectionsUseExtractedCandidatePositions(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		message string
+		draft   bool
+		want    []string
+	}{
+		{
+			name:    "order",
+			message: "The phrase example command is a label. Run `other command`, then `example command`.",
+			want:    []string{"other command", "example command"},
+		},
+		{
+			name:    "containment",
+			message: "The phrase example command is a label.\n\nRun `other command`, then `example command`.",
+			draft:   true,
+			want:    []string{"The phrase example command is a label.", "other command", "example command"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := Prepare(tc.message)
+			scores := make(map[string]float64)
+			for key := range plan.Input().Questions {
+				scores[key] = 0
+			}
+			scores["c1"], scores["c2"] = 1, 1
+			if tc.draft {
+				scores["p1"] = 1
+			}
+			got, err := plan.Select(scores)
+			if err != nil || !slices.Equal(got, tc.want) {
+				t.Fatalf("got=%q want=%q err=%v", got, tc.want, err)
+			}
+		})
+	}
+}
+
+func TestDiscardedDraftDoesNotSuppressCommand(t *testing.T) {
+	message := strings.Repeat("a", 6500) + " `example command`\n\n" + strings.Repeat("b", 6500)
+	plan := Prepare(message)
+	got, err := plan.Select(map[string]float64{"c1": 1, "p1": 1, "p2": 1})
+	if err != nil || !slices.Equal(got, []string{"example command"}) {
 		t.Fatalf("got=%q err=%v", got, err)
 	}
 }

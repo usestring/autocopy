@@ -47,28 +47,33 @@ var (
 	copyCandidatePattern         = regexp.MustCompile(copyFencePattern.String() + "|" + copySpanPattern.String() + "|(" + copyURLPattern.String() + ")")
 )
 
-// copyCandidates is the text in message an operator might lift, in the
-// order it appears: fenced blocks, code spans and links outside them.
+type copyCandidate struct {
+	start int
+	text  string
+}
+
+// Source offsets distinguish copyable spans from earlier mentions of the same text.
 // Text too short to be worth a key, or too long to send, is left out
 // rather than cut, since a truncated command is worse than none.
-func copyCandidates(message string) []string {
-	var out []string
+func copyCandidates(message string) []copyCandidate {
+	var out []copyCandidate
 	seen := map[string]bool{}
-	add := func(text string) {
-		text = strings.TrimSpace(text)
+	add := func(raw string, start int) {
+		text := strings.TrimSpace(raw)
+		start += strings.Index(raw, text)
 		n := utf8.RuneCountInString(text)
 		if n < jevCopyMinChars || n > jevCopyCandidateMax || seen[text] || len(out) >= jevCopyCandidates {
 			return
 		}
 		seen[text] = true
-		out = append(out, text)
+		out = append(out, copyCandidate{start: start, text: text})
 	}
 	for _, match := range copyCandidatePattern.FindAllStringSubmatchIndex(message, -1) {
 		switch {
 		case match[2] >= 0:
-			add(message[match[2]:match[3]])
+			add(message[match[2]:match[3]], match[2])
 		case match[4] >= 0:
-			add(message[match[4]:match[5]])
+			add(message[match[4]:match[5]], match[4])
 		case match[6] >= 0:
 			start, end := match[6], match[7]
 			link := message[start:end]
@@ -88,7 +93,7 @@ func copyCandidates(message string) []string {
 					depth--
 				}
 			}
-			add(link)
+			add(link, start)
 		}
 	}
 	return out
@@ -135,10 +140,10 @@ func copyDraftParts(message string) []copyProsePart {
 	return parts
 }
 
-func jevCopyQuestions(message string, candidates []string) map[string]string {
+func jevCopyQuestions(message string, candidates []copyCandidate) map[string]string {
 	questions := make(map[string]string, len(candidates))
 	for i, candidate := range candidates {
-		questions[fmt.Sprintf("c%d", i+1)] = jevCopyQuestion + candidate
+		questions[fmt.Sprintf("c%d", i+1)] = jevCopyQuestion + candidate.text
 	}
 	for i, part := range copyDraftParts(message) {
 		questions[fmt.Sprintf("p%d", i+1)] = jevCopyDraftQuestion + message[part.start:part.end]
@@ -146,7 +151,7 @@ func jevCopyQuestions(message string, candidates []string) map[string]string {
 	return questions
 }
 
-func pickJevCopy(message string, candidates []string, answers map[string]float64) []string {
+func pickJevCopy(message string, candidates []copyCandidate, answers map[string]float64) []string {
 	var drafts []copyProsePart
 	for i, part := range copyDraftParts(message) {
 		if answers[fmt.Sprintf("p%d", i+1)] < jevCopyThreshold {
@@ -162,27 +167,27 @@ func pickJevCopy(message string, candidates []string, answers map[string]float64
 		start int
 		text  string
 	}
+	drafts = slices.DeleteFunc(drafts, func(draft copyProsePart) bool {
+		return utf8.RuneCountInString(message[draft.start:draft.end]) > jevCopyCandidateMax
+	})
 	var picks []pick
 	for _, draft := range drafts {
-		text := message[draft.start:draft.end]
-		if utf8.RuneCountInString(text) <= jevCopyCandidateMax {
-			picks = append(picks, pick{draft.start, text})
-		}
+		picks = append(picks, pick{draft.start, message[draft.start:draft.end]})
 	}
 	for i, candidate := range candidates {
 		if answers[fmt.Sprintf("c%d", i+1)] < jevCopyThreshold {
 			continue
 		}
-		start := strings.Index(message, candidate)
+		start := candidate.start
 		contained := false
 		for _, draft := range drafts {
-			if start >= draft.start && start+len(candidate) <= draft.end {
+			if start >= draft.start && start+len(candidate.text) <= draft.end {
 				contained = true
 				break
 			}
 		}
 		if !contained {
-			picks = append(picks, pick{start, candidate})
+			picks = append(picks, pick{start, candidate.text})
 		}
 	}
 	slices.SortStableFunc(picks, func(a, b pick) int { return cmp.Compare(a.start, b.start) })
@@ -210,7 +215,7 @@ type Classifier interface {
 
 type Plan struct {
 	message    string
-	candidates []string
+	candidates []copyCandidate
 	questions  map[string]string
 }
 

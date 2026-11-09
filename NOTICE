@@ -1,0 +1,23 @@
+autocopy
+Copyright (c) 2026 Relativity Labs Inc.
+
+Portions extracted from Gate Inbox, licensed under Apache-2.0:
+https://github.com/usestring/gate-inbox
+
+The source distribution preserves the following upstream notice:
+
+agent-manager
+Copyright 2026 Yoan Wai and the agent-manager contributors
+
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+
+This distribution contains a modified copy of agent-manager.
+
+Modifications by String, 2026, beginning from upstream commit
+4b7c163 and merged with upstream through commit
+8b0484d6f585271c5528825980cc017322e4c595. Changes from that commit are
+recorded in this repository's history.
+
+The upstream source is at https://github.com/YoanWai/agent-manager.

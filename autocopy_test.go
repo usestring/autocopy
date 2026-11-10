@@ -85,6 +85,31 @@ func TestCopyCandidatesLeavesOutWhatIsTooLongRatherThanCutting(t *testing.T) {
 	}
 }
 
+func TestInlineCommandsMatchDelimiterLength(t *testing.T) {
+	for _, tc := range []struct {
+		message string
+		want    []string
+	}{
+		{"Run ``echo `hostname` && echo done``.", []string{"echo `hostname` && echo done"}},
+		{"Run ``` printf '``' ``` then `next command`.", []string{"printf '``'", "next command"}},
+		{"A stray `` then `real command` and https://example.test/after.", []string{"real command", "https://example.test/after."}},
+		{"Unclosed ``echo\nnext`` line then `last command`.", []string{"last command"}},
+	} {
+		if got := copyCandidateTexts(tc.message); !slices.Equal(got, tc.want) {
+			t.Errorf("message %q: candidates = %q, want %q", tc.message, got, tc.want)
+		}
+	}
+	plan := Prepare("Run ``echo `hostname` && echo done``.")
+	scores := make(map[string]float64)
+	for key := range plan.Input().Questions {
+		scores[key] = 0
+	}
+	scores["c1"] = 1
+	if got, err := plan.Select(scores); err != nil || !slices.Equal(got, []string{"echo `hostname` && echo done"}) {
+		t.Fatalf("got=%q err=%v", got, err)
+	}
+}
+
 func copyCandidateTexts(message string) []string {
 	var texts []string
 	for _, candidate := range copyCandidates(message) {

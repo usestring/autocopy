@@ -39,11 +39,46 @@ const jevHasDraftQuestion = "Does the assistant provide an unsent message or doc
 var (
 	copyParagraphBreakPattern    = regexp.MustCompile(`\r?\n[ \t]*\r?\n`)
 	copyFenceLinePattern         = regexp.MustCompile("(?m)^ {0,3}(`{3,})([^\\r\\n]*)\\r?$")
-	copySpanPattern              = regexp.MustCompile("`([^`\\n]+)`")
 	copyURLPattern               = regexp.MustCompile(`https?://[^\s<>\[\]"'` + "`" + `]+`)
 	copyProseContinuationPattern = regexp.MustCompile(`^[ \t]+\p{L}`)
-	copyCandidatePattern         = regexp.MustCompile(copySpanPattern.String() + "|(" + copyURLPattern.String() + ")")
 )
+
+// copySpans returns the content offsets of single-line inline code spans. As in
+// CommonMark, a span closes only at a backtick run as long as its opener, so a
+// shorter run inside it stays literal text; an unmatched run is ordinary text.
+func copySpans(text string) [][2]int {
+	var spans [][2]int
+	run := func(i int) int {
+		n := 0
+		for i+n < len(text) && text[i+n] == '`' {
+			n++
+		}
+		return n
+	}
+	for i := 0; i < len(text); {
+		width := run(i)
+		if width == 0 {
+			i++
+			continue
+		}
+		closed := false
+		for j := i + width; j < len(text) && text[j] != '\n'; {
+			if n := run(j); n == width {
+				spans = append(spans, [2]int{i + width, j})
+				i, closed = j+n, true
+				break
+			} else if n > 0 {
+				j += n
+			} else {
+				j++
+			}
+		}
+		if !closed {
+			i += width
+		}
+	}
+	return spans
+}
 
 type copyFence struct {
 	start, end               int
@@ -94,13 +129,9 @@ func copyCandidates(message string) []copyCandidate {
 		seen[text] = true
 		out = append(out, copyCandidate{start: start, text: text})
 	}
-	addInline := func(start, end int) {
-		for _, match := range copyCandidatePattern.FindAllStringSubmatchIndex(message[start:end], -1) {
-			if match[2] >= 0 {
-				add(message[start+match[2]:start+match[3]], start+match[2])
-				continue
-			}
-			left, right := start+match[4], start+match[5]
+	addLinks := func(start, end int) {
+		for _, match := range copyURLPattern.FindAllStringIndex(message[start:end], -1) {
+			left, right := start+match[0], start+match[1]
 			link := message[left:right]
 			if (left == 0 || message[left-1] != '<' && message[left-1] != '(') &&
 				copyProseContinuationPattern.MatchString(message[right:]) {
@@ -120,6 +151,15 @@ func copyCandidates(message string) []copyCandidate {
 			}
 			add(link, left)
 		}
+	}
+	addInline := func(start, end int) {
+		next := start
+		for _, span := range copySpans(message[start:end]) {
+			addLinks(next, start+span[0])
+			add(message[start+span[0]:start+span[1]], start+span[0])
+			next = start + span[1]
+		}
+		addLinks(next, end)
 	}
 	start := 0
 	for _, fence := range copyFences(message) {

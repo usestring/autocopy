@@ -61,9 +61,10 @@ only `after` results and metrics are present.
 
 Current prose classification separates draft presence from paragraph membership.
 A paragraph must pass both decisions at the unchanged 0.8 threshold; a positive
-paragraph score alone cannot turn a status update into a draft. Candidate commands
-and links are selected independently. The frozen baseline keeps its original
-question and selection behavior.
+paragraph score alone cannot turn a status update into a draft. Each extracted
+candidate has separate command, draft, and link-or-value questions. Any positive
+intent can select it, but the draft intent also requires positive draft presence.
+The frozen baseline keeps its original question and selection behavior.
 
 Exact-case accuracy requires every selection and its order to match. Correct,
 missed and extra counts compare complete items; a partial reply is a missed
@@ -72,9 +73,10 @@ counts. Request errors are counted separately and always fail exact-case scoring
 an error cannot become a correct empty selection. The summary's latency is
 available per case, not a benchmark of classifier speed on a controlled host.
 
-The current corpus and score-to-output regressions run in CI with no live API.
-Keep a failure as a separately labelled case before tuning. For larger future
-runs, separate tuning cases from a held-out set and report results on both.
+The default offline command and package tests cover the current corpus and
+score-to-output regressions without a live API. Keep a failure as a separately
+labelled case before tuning. For larger future runs, separate tuning cases from a
+held-out set and report results on both.
 
 ## Reading a failure
 

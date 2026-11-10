@@ -24,7 +24,11 @@ const (
 )
 
 // jevCopyQuestion is asked once per candidate, with the candidate quoted.
-const jevCopyQuestion = "The assistant is telling the user to run, open, or paste the text below. Text: "
+const jevCopyQuestion = "Is this text a command supplied for the user to run? Text: "
+
+const jevCopyCandidateDraftQuestion = "Is this text the reply or document draft presented by the assistant? Text: "
+
+const jevCopyValueQuestion = "Is this text a link or value supplied for the user to open or paste? Text: "
 
 const jevCopyDraftQuestion = "This paragraph is part of the message or document the assistant is drafting " +
 	"for the user to send or paste elsewhere. Paragraph: "
@@ -33,12 +37,40 @@ const jevHasDraftQuestion = "Does the assistant provide an unsent message or doc
 
 var (
 	copyParagraphBreakPattern    = regexp.MustCompile(`\r?\n[ \t]*\r?\n`)
-	copyFencePattern             = regexp.MustCompile("(?s)```[^\\n`]*\\n(.*?)```")
+	copyFenceLinePattern         = regexp.MustCompile("(?m)^ {0,3}(`{3,})([^\\r\\n]*)\\r?$")
 	copySpanPattern              = regexp.MustCompile("`([^`\\n]+)`")
 	copyURLPattern               = regexp.MustCompile(`https?://[^\s<>\[\]"'` + "`" + `]+`)
 	copyProseContinuationPattern = regexp.MustCompile(`^[ \t]+\p{L}`)
-	copyCandidatePattern         = regexp.MustCompile(copyFencePattern.String() + "|" + copySpanPattern.String() + "|(" + copyURLPattern.String() + ")")
+	copyCandidatePattern         = regexp.MustCompile(copySpanPattern.String() + "|(" + copyURLPattern.String() + ")")
 )
+
+type copyFence struct {
+	start, end               int
+	contentStart, contentEnd int
+}
+
+func copyFences(message string) []copyFence {
+	var fences []copyFence
+	var open *copyFence
+	var width int
+	for _, line := range copyFenceLinePattern.FindAllStringSubmatchIndex(message, -1) {
+		markerWidth := line[3] - line[2]
+		tail := message[line[4]:line[5]]
+		if open == nil {
+			if strings.Contains(tail, "`") || line[1] == len(message) {
+				continue
+			}
+			open = &copyFence{start: line[0], contentStart: line[1] + 1}
+			width = markerWidth
+		} else if markerWidth >= width && strings.TrimSpace(tail) == "" {
+			open.end = line[1]
+			open.contentEnd = line[0]
+			fences = append(fences, *open)
+			open = nil
+		}
+	}
+	return fences
+}
 
 type copyCandidate struct {
 	start int
@@ -61,17 +93,16 @@ func copyCandidates(message string) []copyCandidate {
 		seen[text] = true
 		out = append(out, copyCandidate{start: start, text: text})
 	}
-	for _, match := range copyCandidatePattern.FindAllStringSubmatchIndex(message, -1) {
-		switch {
-		case match[2] >= 0:
-			add(message[match[2]:match[3]], match[2])
-		case match[4] >= 0:
-			add(message[match[4]:match[5]], match[4])
-		case match[6] >= 0:
-			start, end := match[6], match[7]
-			link := message[start:end]
-			if (start == 0 || message[start-1] != '<' && message[start-1] != '(') &&
-				copyProseContinuationPattern.MatchString(message[end:]) {
+	addInline := func(start, end int) {
+		for _, match := range copyCandidatePattern.FindAllStringSubmatchIndex(message[start:end], -1) {
+			if match[2] >= 0 {
+				add(message[start+match[2]:start+match[3]], start+match[2])
+				continue
+			}
+			left, right := start+match[4], start+match[5]
+			link := message[left:right]
+			if (left == 0 || message[left-1] != '<' && message[left-1] != '(') &&
+				copyProseContinuationPattern.MatchString(message[right:]) {
 				link = strings.TrimRight(link, ".,;:!?")
 			}
 			depth := 0
@@ -86,9 +117,16 @@ func copyCandidates(message string) []copyCandidate {
 					depth--
 				}
 			}
-			add(link, start)
+			add(link, left)
 		}
 	}
+	start := 0
+	for _, fence := range copyFences(message) {
+		addInline(start, fence.start)
+		add(message[fence.contentStart:fence.contentEnd], fence.contentStart)
+		start = fence.end
+	}
+	addInline(start, len(message))
 	return out
 }
 
@@ -102,7 +140,7 @@ func copyDraftParts(message string) []copyProsePart {
 	if utf8.RuneCountInString(message) > jevCopyMessageChars {
 		return nil
 	}
-	fences := copyFencePattern.FindAllStringIndex(message, -1)
+	fences := copyFences(message)
 	breaks := copyParagraphBreakPattern.FindAllStringIndex(message, -1)
 	if len(breaks) == 0 {
 		return nil
@@ -116,7 +154,7 @@ func copyDraftParts(message string) []copyProsePart {
 		part := copyProsePart{start: left, end: left + len(text)}
 		inFence := false
 		for _, fence := range fences {
-			if part.start < fence[1] && part.end > fence[0] {
+			if part.start < fence.end && part.end > fence.start {
 				inFence = true
 				break
 			}
@@ -134,12 +172,14 @@ func copyDraftParts(message string) []copyProsePart {
 }
 
 func jevCopyQuestions(message string, candidates []copyCandidate) map[string]string {
-	questions := make(map[string]string, len(candidates))
+	questions := make(map[string]string, 3*len(candidates))
 	for i, candidate := range candidates {
 		questions[fmt.Sprintf("c%d", i+1)] = jevCopyQuestion + candidate.text
+		questions[fmt.Sprintf("d%d", i+1)] = jevCopyCandidateDraftQuestion + candidate.text
+		questions[fmt.Sprintf("v%d", i+1)] = jevCopyValueQuestion + candidate.text
 	}
 	parts := copyDraftParts(message)
-	if len(parts) > 0 {
+	if len(parts) > 0 || len(candidates) > 0 {
 		questions["has_draft"] = jevHasDraftQuestion
 	}
 	for i, part := range parts {
@@ -173,7 +213,10 @@ func pickJevCopy(message string, candidates []copyCandidate, answers map[string]
 		picks = append(picks, pick{draft.start, message[draft.start:draft.end]})
 	}
 	for i, candidate := range candidates {
-		if answers[fmt.Sprintf("c%d", i+1)] < jevCopyThreshold {
+		command := answers[fmt.Sprintf("c%d", i+1)] >= jevCopyThreshold
+		draft := answers["has_draft"] >= jevCopyThreshold && answers[fmt.Sprintf("d%d", i+1)] >= jevCopyThreshold
+		value := answers[fmt.Sprintf("v%d", i+1)] >= jevCopyThreshold
+		if !command && !draft && !value {
 			continue
 		}
 		start := candidate.start

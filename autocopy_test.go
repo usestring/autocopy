@@ -92,3 +92,27 @@ func copyCandidateTexts(message string) []string {
 	}
 	return texts
 }
+
+func TestFencedCommandsPreserveLiteralBackticks(t *testing.T) {
+	for _, tc := range []struct{ name, fence, body string }{
+		{"literal", "```", "printf '%s\\n' '```'\necho done"},
+		{"longer fence", "````", "echo before\n```\necho after"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			message := "Run this command:\n\n" + tc.fence + "sh\n" + tc.body + "\n" + tc.fence + "\n\nThen run `next command`."
+			if got := copyCandidateTexts(message); !slices.Equal(got, []string{tc.body, "next command"}) {
+				t.Fatalf("candidates=%q", got)
+			}
+			plan := Prepare(message)
+			scores := make(map[string]float64)
+			for key := range plan.Input().Questions {
+				scores[key] = 0
+			}
+			scores["c1"], scores["c2"] = 1, 1
+			got, err := plan.Select(scores)
+			if err != nil || !slices.Equal(got, []string{tc.body, "next command"}) {
+				t.Fatalf("got=%q err=%v", got, err)
+			}
+		})
+	}
+}

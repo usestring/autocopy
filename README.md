@@ -127,8 +127,11 @@ characters, with up to 24,000 characters of message context. Overlong blocks are
 omitted rather than truncated. Prose draft selection requires paragraph boundaries
 and complete message context; it is omitted when the whole message exceeds that
 context limit. Classification uses a confidence threshold of 0.8. Prose selection
-requires both a positive draft-presence answer and positive paragraph answers;
-command and link selections do not depend on draft presence.
+requires both a positive draft-presence answer and positive paragraph answers.
+Each extracted block, code span, or link is assessed separately as a command, a
+draft, and a link or value. A candidate draft also requires a positive
+draft-presence answer; command and link selections are independent of it.
+These bounds produce at most 57 questions per message.
 
 The model can still select the wrong text or miss a paragraph. The committed
 cases make those mistakes visible when they occur; they do not replace checking

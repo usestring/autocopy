@@ -41,7 +41,7 @@ func TestSelectedCurrentCasesLimitRequests(t *testing.T) {
 		if input.Message != "Run `selected command`." {
 			t.Errorf("sent unselected case: %q", input.Message)
 		}
-		return map[string]float64{"c1": 1}, nil
+		return map[string]float64{"c1": 1, "d1": 0, "v1": 0, "has_draft": 0}, nil
 	})
 	report, err := Run(context.Background(), data, classifier, "test", "test", Options{CaseIDs: []string{"selected"}, CurrentOnly: true})
 	if err != nil {

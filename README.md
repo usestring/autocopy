@@ -114,7 +114,7 @@ cases; getting them right does not establish accuracy on unseen messages.
 Omit `-only` to evaluate the full corpus, and omit `-current-only` to compare the
 frozen baseline. That comparison makes at most two requests per case.
 The report includes exact expected and actual selections, scores, request errors,
-latency, model, threshold, corpus hash, and an input hash per case. A failed request
+latency, model, thresholds, corpus hash, and an input hash per case. A failed request
 is a failed case, including when the
 expected selection is empty. The command writes the report before failing if any
 current case differs from its label. Live runs are excluded from CI.
@@ -126,8 +126,9 @@ and at most 32 prose paragraphs. It keeps intact copyable text up to 12,000 Unic
 characters, with up to 24,000 characters of message context. Overlong blocks are
 omitted rather than truncated. Prose draft selection requires paragraph boundaries
 and complete message context; it is omitted when the whole message exceeds that
-context limit. Classification uses a confidence threshold of 0.8. Prose selection
-requires both a positive draft-presence answer and positive paragraph answers.
+context limit. Commands use a confidence threshold of 0.7; drafts and links or
+values use 0.8. Prose selection requires both a positive draft-presence answer
+and positive paragraph answers.
 Each extracted block, code span, or link is assessed separately as a command, a
 draft, and a link or value. A candidate draft also requires a positive
 draft-presence answer; command and link selections are independent of it.

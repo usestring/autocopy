@@ -53,17 +53,20 @@ unknown or duplicate selected identifiers before sending anything, and sends at
 most one request per selected case with `-current-only`.
 
 `results.json` contains the run mode, model, build revision when available,
-threshold, current limits, corpus SHA-256, baseline/current summaries, and each
-case's expected output, actual output, scores, input hash, error and elapsed time.
+draft/value `threshold`, `command_threshold`, current limits, corpus SHA-256,
+baseline/current summaries, and each case's expected output, actual output,
+scores, input hash, error and elapsed time.
 The corpus hash always identifies the complete input file. Case identifiers in
 `results` identify the selected subset, in corpus order. With `-current-only`,
 only `after` results and metrics are present.
 
 Current prose classification separates draft presence from paragraph membership.
-A paragraph must pass both decisions at the unchanged 0.8 threshold; a positive
+A paragraph must pass both decisions at the 0.8 threshold; a positive
 paragraph score alone cannot turn a status update into a draft. Each extracted
 candidate has separate command, draft, and link-or-value questions. Any positive
 intent can select it, but the draft intent also requires positive draft presence.
+The command decision uses a 0.7 threshold; draft and link-or-value decisions
+remain at 0.8. Multiple qualifying commands remain separate picks in source order.
 The frozen baseline keeps its original question and selection behavior.
 
 Exact-case accuracy requires every selection and its order to match. Correct,

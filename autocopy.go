@@ -17,6 +17,7 @@ import (
 
 const (
 	jevCopyThreshold    = 0.80
+	jevCommandThreshold = 0.70
 	jevCopyCandidates   = 8
 	jevCopyCandidateMax = 12000
 	jevCopyMinChars     = 4
@@ -213,7 +214,7 @@ func pickJevCopy(message string, candidates []copyCandidate, answers map[string]
 		picks = append(picks, pick{draft.start, message[draft.start:draft.end]})
 	}
 	for i, candidate := range candidates {
-		command := answers[fmt.Sprintf("c%d", i+1)] >= jevCopyThreshold
+		command := answers[fmt.Sprintf("c%d", i+1)] >= jevCommandThreshold
 		draft := answers["has_draft"] >= jevCopyThreshold && answers[fmt.Sprintf("d%d", i+1)] >= jevCopyThreshold
 		value := answers[fmt.Sprintf("v%d", i+1)] >= jevCopyThreshold
 		if !command && !draft && !value {
@@ -241,6 +242,7 @@ func pickJevCopy(message string, candidates []copyCandidate, answers map[string]
 
 const (
 	Threshold         = jevCopyThreshold
+	CommandThreshold  = jevCommandThreshold
 	CandidateMaxChars = jevCopyCandidateMax
 	ContextMaxChars   = jevCopyMessageChars
 )

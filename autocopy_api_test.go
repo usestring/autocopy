@@ -145,3 +145,18 @@ func TestSentDraftDoesNotBecomeCopyCandidate(t *testing.T) {
 		t.Fatalf("got=%q err=%v", got, err)
 	}
 }
+
+func TestCommandsBelowDraftConfidenceRemainSeparatePicks(t *testing.T) {
+	plan := Prepare("Run `sample auth refresh`, then `sample auth status`. The earlier `sample auth reset` was already run. A reference link is <https://example.test/notes>.")
+	scores := make(map[string]float64)
+	for key := range plan.Input().Questions {
+		scores[key] = 0
+	}
+	scores["c1"], scores["c2"], scores["c3"] = 0.7478, 0.8836, 0.5725
+	scores["d3"], scores["v3"] = 0.4972, 0.5942
+	scores["has_draft"], scores["d4"], scores["v4"] = 0.95, 0.75, 0.75
+	got, err := plan.Select(scores)
+	if err != nil || !slices.Equal(got, []string{"sample auth refresh", "sample auth status"}) {
+		t.Fatalf("got=%q err=%v", got, err)
+	}
+}

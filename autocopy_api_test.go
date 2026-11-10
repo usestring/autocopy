@@ -23,7 +23,7 @@ func TestDraftAndEmbeddedLinkStayTogether(t *testing.T) {
 		for key := range input.Questions {
 			scores[key] = 0
 		}
-		scores["p2"], scores["p3"], scores["c1"] = 1, 1, 1
+		scores["has_draft"], scores["p2"], scores["p3"], scores["c1"] = 1, 1, 1, 1
 		return scores, nil
 	}))
 	if err != nil || !slices.Equal(got, []string{draft}) {
@@ -48,6 +48,19 @@ func TestClassifierErrorsReturnNoCopy(t *testing.T) {
 	got, err := Extract(context.Background(), "Run `example command`.", classifierFunc(func(context.Context, Input) (map[string]float64, error) { return nil, failure }))
 	if got != nil || !errors.Is(err, failure) {
 		t.Fatalf("got=%q err=%v", got, err)
+	}
+}
+
+func TestDraftPresenceDoesNotSuppressCommand(t *testing.T) {
+	plan := Prepare("Run `example command`.\n\nAll tests pass. The change is ready for review.")
+	scores := map[string]float64{"c1": 1, "p1": 0.9, "p2": 0.9, "has_draft": 0.1}
+	got, err := plan.Select(scores)
+	if err != nil || !slices.Equal(got, []string{"example command"}) {
+		t.Fatalf("got=%q err=%v", got, err)
+	}
+	delete(scores, "has_draft")
+	if _, err := plan.Select(scores); err == nil {
+		t.Fatal("accepted a missing draft-presence answer")
 	}
 }
 
@@ -78,7 +91,7 @@ func TestSelectionsUseExtractedCandidatePositions(t *testing.T) {
 			}
 			scores["c1"], scores["c2"] = 1, 1
 			if tc.draft {
-				scores["p1"] = 1
+				scores["has_draft"], scores["p1"] = 1, 1
 			}
 			got, err := plan.Select(scores)
 			if err != nil || !slices.Equal(got, tc.want) {
@@ -91,7 +104,7 @@ func TestSelectionsUseExtractedCandidatePositions(t *testing.T) {
 func TestDiscardedDraftDoesNotSuppressCommand(t *testing.T) {
 	message := strings.Repeat("a", 6500) + " `example command`\n\n" + strings.Repeat("b", 6500)
 	plan := Prepare(message)
-	got, err := plan.Select(map[string]float64{"c1": 1, "p1": 1, "p2": 1})
+	got, err := plan.Select(map[string]float64{"c1": 1, "has_draft": 1, "p1": 1, "p2": 1})
 	if err != nil || !slices.Equal(got, []string{"example command"}) {
 		t.Fatalf("got=%q err=%v", got, err)
 	}

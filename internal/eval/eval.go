@@ -65,6 +65,12 @@ func Oracle(input autocopy.Input, want []string) map[string]float64 {
 	scores := make(map[string]float64, len(input.Questions))
 	for name, question := range input.Questions {
 		scores[name] = 0
+		if name == "has_draft" {
+			if len(want) > 0 {
+				scores[name] = 1
+			}
+			continue
+		}
 		paragraph := strings.HasPrefix(name, "p")
 		marker := "Text: "
 		if paragraph {
@@ -83,7 +89,12 @@ func Oracle(input autocopy.Input, want []string) map[string]float64 {
 	return scores
 }
 
-func Run(ctx context.Context, data []byte, classifier autocopy.Classifier, model, revision string) (*Report, error) {
+type Options struct {
+	CaseIDs     []string
+	CurrentOnly bool
+}
+
+func Run(ctx context.Context, data []byte, classifier autocopy.Classifier, model, revision string, options Options) (*Report, error) {
 	var cases []Case
 	if err := json.Unmarshal(data, &cases); err != nil {
 		return nil, err
@@ -103,18 +114,36 @@ func Run(ctx context.Context, data []byte, classifier autocopy.Classifier, model
 			}
 		}
 	}
+	if len(options.CaseIDs) > 0 {
+		selected := make(map[string]bool)
+		for _, id := range options.CaseIDs {
+			if !ids[id] || selected[id] {
+				return nil, fmt.Errorf("unknown or duplicate selected case %q", id)
+			}
+			selected[id] = true
+		}
+		cases = slices.DeleteFunc(cases, func(c Case) bool { return !selected[c.ID] })
+	}
 	mode := "oracle"
 	if classifier != nil {
 		mode = "live"
 	} else {
 		model = "oracle-labels"
 	}
+	variants := []string{"before", "after"}
+	if options.CurrentOnly {
+		variants = []string{"after"}
+	}
+	metrics := make(map[string]*Metrics, len(variants))
+	for _, variant := range variants {
+		metrics[variant] = &Metrics{}
+	}
 	report := &Report{SchemaVersion: 1, Mode: mode, Model: model, Revision: revision, CorpusSHA256: Digest(data), Threshold: autocopy.Threshold,
 		CandidateMaxChars: autocopy.CandidateMaxChars, ContextMaxChars: autocopy.ContextMaxChars,
-		Metrics: map[string]*Metrics{"before": {}, "after": {}},
+		Metrics: metrics,
 	}
 	for _, c := range cases {
-		for _, variant := range []string{"before", "after"} {
+		for _, variant := range variants {
 			plan := autocopy.Prepare(c.Message)
 			input := plan.Input()
 			var candidates []string

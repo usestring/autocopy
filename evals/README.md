@@ -38,9 +38,32 @@ Add `-live` only when the corpus is approved for transfer and the environment ha
 `TYPESAFE_API_KEY`. The default is offline even when the environment holds a key.
 Importing either Go package does not read environment variables or start requests.
 
+For a small development loop, choose case identifiers and skip the baseline:
+
+```sh
+go run ./cmd/autocopy-eval -live -current-only \
+  -only terraform-plan,open-runbook,billing-initial-unfenced,status-only \
+  -out /tmp/autocopy-small.json
+```
+
+The four cases cover a command, a link-opening command, an unfenced draft, and a
+status update with no wanted selection. Keep their labels fixed while changing
+prompts. They are development cases, not a held-out benchmark. The runner rejects
+unknown or duplicate selected identifiers before sending anything, and sends at
+most one request per selected case with `-current-only`.
+
 `results.json` contains the run mode, model, build revision when available,
 threshold, current limits, corpus SHA-256, baseline/current summaries, and each
 case's expected output, actual output, scores, input hash, error and elapsed time.
+The corpus hash always identifies the complete input file. Case identifiers in
+`results` identify the selected subset, in corpus order. With `-current-only`,
+only `after` results and metrics are present.
+
+Current prose classification separates draft presence from paragraph membership.
+A paragraph must pass both decisions at the unchanged 0.8 threshold; a positive
+paragraph score alone cannot turn a status update into a draft. Candidate commands
+and links are selected independently. The frozen baseline keeps its original
+question and selection behavior.
 
 Exact-case accuracy requires every selection and its order to match. Correct,
 missed and extra counts compare complete items; a partial reply is a missed

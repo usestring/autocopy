@@ -51,7 +51,7 @@ accuracy.** The unfenced draft variants and longer draft cannot be recovered by
 the earlier candidate generator even with perfect labels. The oracle deliberately
 supplies those labels so the deterministic part can be checked independently.
 
-There are no measured live classifier results yet. Do not read the table as a
+There is no published live classifier benchmark. Do not read the table as a
 claim that the package finds every draft correctly. This is a small, selected
 regression set, not a held-out or representative benchmark.
 
@@ -101,12 +101,21 @@ the key from the environment. Run it only with permission to send that corpus:
 
 ```sh
 export TYPESAFE_API_KEY='your-key'
-go run ./cmd/autocopy-eval -live -out /tmp/autocopy-live.json
+go run ./cmd/autocopy-eval -live -current-only \
+  -only terraform-plan,open-runbook,billing-initial-unfenced,status-only \
+  -out /tmp/autocopy-small.json
 ```
 
-It makes at most two requests per case. The report includes exact expected and
-actual selections, scores, request errors, latency, model, threshold, corpus hash,
-and an input hash per case. A failed request is a failed case, including when the
+Start with a few cases during prompt development. This command evaluates only
+four selected cases and skips the frozen baseline, making at most one request per
+case. Unknown or duplicate identifiers fail before any request. These are tuning
+cases; getting them right does not establish accuracy on unseen messages.
+
+Omit `-only` to evaluate the full corpus, and omit `-current-only` to compare the
+frozen baseline. That comparison makes at most two requests per case.
+The report includes exact expected and actual selections, scores, request errors,
+latency, model, threshold, corpus hash, and an input hash per case. A failed request
+is a failed case, including when the
 expected selection is empty. The command writes the report before failing if any
 current case differs from its label. Live runs are excluded from CI.
 
@@ -117,7 +126,9 @@ and at most 32 prose paragraphs. It keeps intact copyable text up to 12,000 Unic
 characters, with up to 24,000 characters of message context. Overlong blocks are
 omitted rather than truncated. Prose draft selection requires paragraph boundaries
 and complete message context; it is omitted when the whole message exceeds that
-context limit. Classification uses a confidence threshold of 0.8.
+context limit. Classification uses a confidence threshold of 0.8. Prose selection
+requires both a positive draft-presence answer and positive paragraph answers;
+command and link selections do not depend on draft presence.
 
 The model can still select the wrong text or miss a paragraph. The committed
 cases make those mistakes visible when they occur; they do not replace checking

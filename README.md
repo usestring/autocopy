@@ -59,8 +59,15 @@ regression set, not a held-out or representative benchmark.
 
 ## Import it
 
-Requires Go 1.24 or newer. The first release is in preparation; until it is tagged,
-there is no stable version to pin.
+Requires Go 1.24 or newer.
+
+```sh
+go get github.com/usestring/autocopy@v0.1.0
+```
+
+[`examples/consumer`](examples/consumer) is a separate module that imports the
+published release with no `replace` directive, using a stand-in classifier so it
+runs offline.
 
 ```go
 import (

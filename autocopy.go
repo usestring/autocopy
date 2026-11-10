@@ -34,6 +34,8 @@ const jevCopyValueQuestion = "Is this text a link or value supplied for the user
 const jevCopyDraftQuestion = "This paragraph is part of the message or document the assistant is drafting " +
 	"for the user to send or paste elsewhere. Paragraph: "
 
+const jevCopyCommentaryQuestion = "Is this text an introduction, explanation, caveat, or instruction addressed by the assistant to the user, rather than text addressed to the recipient of the draft? Text: "
+
 const jevHasDraftQuestion = "Does the assistant provide an unsent message or document draft for the user to copy elsewhere?"
 
 var (
@@ -225,6 +227,7 @@ func jevCopyQuestions(message string, candidates []copyCandidate) map[string]str
 	}
 	for i, part := range parts {
 		questions[fmt.Sprintf("p%d", i+1)] = jevCopyDraftQuestion + message[part.start:part.end]
+		questions[fmt.Sprintf("mp%d", i+1)] = jevCopyCommentaryQuestion + message[part.start:part.end]
 	}
 	return questions
 }
@@ -233,7 +236,9 @@ func pickJevCopy(message string, candidates []copyCandidate, answers map[string]
 	var drafts []copyProsePart
 	for i, part := range copyDraftParts(message) {
 		// A status paragraph can sound copyable even when no draft exists.
-		if answers["has_draft"] < jevCopyThreshold || answers[fmt.Sprintf("p%d", i+1)] < jevCopyThreshold {
+		membership := answers[fmt.Sprintf("p%d", i+1)]
+		commentary := answers[fmt.Sprintf("mp%d", i+1)]
+		if answers["has_draft"] < ProsePresenceThreshold || membership-commentary < ProseMargin {
 			continue
 		}
 		if len(drafts) > 0 && strings.TrimSpace(message[drafts[len(drafts)-1].end:part.start]) == "" {
@@ -281,10 +286,12 @@ func pickJevCopy(message string, candidates []copyCandidate, answers map[string]
 }
 
 const (
-	Threshold         = jevCopyThreshold
-	CommandThreshold  = jevCommandThreshold
-	CandidateMaxChars = jevCopyCandidateMax
-	ContextMaxChars   = jevCopyMessageChars
+	Threshold              = jevCopyThreshold
+	CommandThreshold       = jevCommandThreshold
+	ProsePresenceThreshold = 0.50
+	ProseMargin            = 0.50
+	CandidateMaxChars      = jevCopyCandidateMax
+	ContextMaxChars        = jevCopyMessageChars
 )
 
 type Input struct {

@@ -53,17 +53,22 @@ unknown or duplicate selected identifiers before sending anything, and sends at
 most one request per selected case with `-current-only`.
 
 `results.json` contains the run mode, model, build revision when available,
-draft/value `threshold`, `command_threshold`, current limits, corpus SHA-256,
+candidate draft/value `threshold`, `command_threshold`, `prose_presence_threshold`,
+`prose_margin`, current limits, corpus SHA-256,
 baseline/current summaries, and each case's expected output, actual output,
 scores, input hash, error and elapsed time.
 The corpus hash always identifies the complete input file. Case identifiers in
 `results` identify the selected subset, in corpus order. With `-current-only`,
 only `after` results and metrics are present.
 
-Current prose classification separates draft presence from paragraph membership.
-A paragraph must pass both decisions at the 0.8 threshold; a positive
-paragraph score alone cannot turn a status update into a draft. Each extracted
-candidate has separate command, draft, and link-or-value questions. Any positive
+Current prose classification requires draft presence of at least 0.5. For each
+paragraph, its draft-membership score must exceed its commentary score by at least
+0.5. The competing question identifies introductions, explanations, caveats and
+instructions addressed to the user. Comparing these roles can retain a draft
+paragraph below 0.8 while excluding a higher-scoring note. The answers are
+independent binary scores; they are not normalized alternatives. Draft presence
+still prevents a positive membership score alone from selecting a status update.
+Each extracted candidate has separate command, draft, and link-or-value questions. Any positive
 intent can select it, but the draft intent also requires positive draft presence.
 The command decision uses a 0.7 threshold; draft and link-or-value decisions
 remain at 0.8. Multiple qualifying commands remain separate picks in source order.

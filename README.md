@@ -99,6 +99,8 @@ type Classifier interface {
 `autocopy.Prepare(reply)` exposes the bounded message and classification questions
 through `Input()`. `Select(probabilities)` validates the answers and assembles the
 picks. Use that pair to supply a different classifier or evaluate recorded scores.
+Recorded scores must cover every question in that prepared plan; changing the
+question set requires fresh scores.
 An absent, invalid, or failed answer produces an error rather than a partial copy.
 
 ## Test the classifier explicitly
@@ -133,13 +135,18 @@ and at most 32 prose paragraphs. It keeps intact copyable text up to 12,000 Unic
 characters, with up to 24,000 characters of message context. Overlong blocks are
 omitted rather than truncated. Prose draft selection requires paragraph boundaries
 and complete message context; it is omitted when the whole message exceeds that
-context limit. Commands use a confidence threshold of 0.7; drafts and links or
-values use 0.8. Prose selection requires both a positive draft-presence answer
-and positive paragraph answers.
+context limit. Commands use a confidence threshold of 0.7; extracted candidate drafts
+and links or values use 0.8. Prose requires draft presence of at least 0.5 and a
+paragraph membership score at least 0.5 above its competing commentary score.
+That comparison distinguishes text addressed to the draft's recipient from
+introductions, explanations, caveats, or instructions addressed to the user.
+The scores are independent answers, not probabilities that sum to one.
 Each extracted block, code span, or link is assessed separately as a command, a
 draft, and a link or value. A candidate draft also requires a positive
 draft-presence answer; command and link selections are independent of it.
-These bounds produce at most 57 questions per message.
+These bounds produce at most 89 questions per message. Each prose paragraph adds
+one membership question and one commentary question; separate qualifying drafts
+remain separate selections in source order.
 
 The model can still select the wrong text or miss a paragraph. The committed
 cases make those mistakes visible when they occur; they do not replace checking

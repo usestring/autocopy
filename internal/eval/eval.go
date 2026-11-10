@@ -47,17 +47,19 @@ type Metrics struct {
 }
 
 type Report struct {
-	SchemaVersion     int                 `json:"schema_version"`
-	Mode              string              `json:"mode"`
-	Model             string              `json:"model"`
-	Revision          string              `json:"revision"`
-	CorpusSHA256      string              `json:"corpus_sha256"`
-	Threshold         float64             `json:"threshold"`
-	CommandThreshold  float64             `json:"command_threshold"`
-	CandidateMaxChars int                 `json:"candidate_max_chars"`
-	ContextMaxChars   int                 `json:"context_max_chars"`
-	Metrics           map[string]*Metrics `json:"metrics"`
-	Results           []Result            `json:"results"`
+	SchemaVersion          int                 `json:"schema_version"`
+	Mode                   string              `json:"mode"`
+	Model                  string              `json:"model"`
+	Revision               string              `json:"revision"`
+	CorpusSHA256           string              `json:"corpus_sha256"`
+	Threshold              float64             `json:"threshold"`
+	CommandThreshold       float64             `json:"command_threshold"`
+	ProsePresenceThreshold float64             `json:"prose_presence_threshold"`
+	ProseMargin            float64             `json:"prose_margin"`
+	CandidateMaxChars      int                 `json:"candidate_max_chars"`
+	ContextMaxChars        int                 `json:"context_max_chars"`
+	Metrics                map[string]*Metrics `json:"metrics"`
+	Results                []Result            `json:"results"`
 }
 
 func Digest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
@@ -72,9 +74,13 @@ func Oracle(input autocopy.Input, want []string) map[string]float64 {
 			}
 			continue
 		}
-		paragraph := strings.HasPrefix(name, "p")
+		commentary := strings.HasPrefix(name, "mp")
+		paragraph := strings.HasPrefix(name, "p") || commentary
+		if commentary {
+			scores[name] = 1
+		}
 		marker := "Text: "
-		if paragraph {
+		if paragraph && !commentary {
 			marker = "Paragraph: "
 		}
 		_, text, ok := strings.Cut(question, marker)
@@ -84,6 +90,9 @@ func Oracle(input autocopy.Input, want []string) map[string]float64 {
 		for _, expected := range want {
 			if text == expected || paragraph && strings.Contains(expected, text) {
 				scores[name] = 1
+				if commentary {
+					scores[name] = 0
+				}
 			}
 		}
 	}
@@ -140,8 +149,10 @@ func Run(ctx context.Context, data []byte, classifier autocopy.Classifier, model
 		metrics[variant] = &Metrics{}
 	}
 	report := &Report{SchemaVersion: 1, Mode: mode, Model: model, Revision: revision, CorpusSHA256: Digest(data), Threshold: autocopy.Threshold,
-		CommandThreshold:  autocopy.CommandThreshold,
-		CandidateMaxChars: autocopy.CandidateMaxChars, ContextMaxChars: autocopy.ContextMaxChars,
+		CommandThreshold:       autocopy.CommandThreshold,
+		ProsePresenceThreshold: autocopy.ProsePresenceThreshold,
+		ProseMargin:            autocopy.ProseMargin,
+		CandidateMaxChars:      autocopy.CandidateMaxChars, ContextMaxChars: autocopy.ContextMaxChars,
 		Metrics: metrics,
 	}
 	for _, c := range cases {

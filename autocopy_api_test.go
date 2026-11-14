@@ -53,7 +53,7 @@ func TestClassifierErrorsReturnNoCopy(t *testing.T) {
 
 func TestDraftPresenceDoesNotSuppressCommand(t *testing.T) {
 	plan := Prepare("Run `example command`.\n\nAll tests pass. The change is ready for review.")
-	scores := map[string]float64{"c1": 1, "d1": 0, "v1": 0, "p1": 0.9, "p2": 0.9, "has_draft": 0.1}
+	scores := map[string]float64{"c1": 1, "d1": 0, "v1": 0, "p1": 0.9, "p2": 0.9, "mp1": 0, "mp2": 0, "has_draft": 0.1}
 	got, err := plan.Select(scores)
 	if err != nil || !slices.Equal(got, []string{"example command"}) {
 		t.Fatalf("got=%q err=%v", got, err)
@@ -104,7 +104,7 @@ func TestSelectionsUseExtractedCandidatePositions(t *testing.T) {
 func TestDiscardedDraftDoesNotSuppressCommand(t *testing.T) {
 	message := strings.Repeat("a", 6500) + " `example command`\n\n" + strings.Repeat("b", 6500)
 	plan := Prepare(message)
-	got, err := plan.Select(map[string]float64{"c1": 1, "d1": 0, "v1": 0, "has_draft": 1, "p1": 1, "p2": 1})
+	got, err := plan.Select(map[string]float64{"c1": 1, "d1": 0, "v1": 0, "has_draft": 1, "p1": 1, "p2": 1, "mp1": 0, "mp2": 0})
 	if err != nil || !slices.Equal(got, []string{"example command"}) {
 		t.Fatalf("got=%q err=%v", got, err)
 	}
@@ -158,5 +158,40 @@ func TestCommandsBelowDraftConfidenceRemainSeparatePicks(t *testing.T) {
 	got, err := plan.Select(scores)
 	if err != nil || !slices.Equal(got, []string{"sample auth refresh", "sample auth status"}) {
 		t.Fatalf("got=%q err=%v", got, err)
+	}
+}
+
+func TestDraftMarginsKeepBoundariesAndSeparateDrafts(t *testing.T) {
+	first := "Hi Maya, the replacement arrives Tuesday.\nPlease confirm receipt.\n\nYour unused balance remains available."
+	second := "Hi Noah, your appointment is confirmed for Friday."
+	message := "Here are two replies.\n\n" + first + "\n\nCheck these dates before sending.\n\n" + second
+	for _, tc := range []struct {
+		name       string
+		presence   float64
+		commentary float64
+		want       []string
+	}{
+		{"moderate presence", .6, .1, []string{first, second}},
+		{"strong presence", .95, .1, []string{first, second}},
+		{"no draft", .49, .1, nil},
+		{"ambiguous body", .95, .85, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := Prepare(message)
+			scores := make(map[string]float64)
+			for key := range plan.Input().Questions {
+				scores[key] = 0
+			}
+			scores["has_draft"] = tc.presence
+			scores["p1"], scores["mp1"] = .65, .7
+			scores["p2"], scores["mp2"] = .9, tc.commentary
+			scores["p3"], scores["mp3"] = .79, tc.commentary
+			scores["p4"], scores["mp4"] = .94, .91
+			scores["p5"], scores["mp5"] = .74, tc.commentary
+			got, err := plan.Select(scores)
+			if err != nil || !slices.Equal(got, tc.want) {
+				t.Fatalf("got=%q want=%q err=%v", got, tc.want, err)
+			}
+		})
 	}
 }
